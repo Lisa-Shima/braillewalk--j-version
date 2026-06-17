@@ -1,11 +1,12 @@
+from __future__ import annotations
+
 import os
-import time
 import threading
-from typing import Dict, List, Optional, Tuple
+import time
 
 import cv2
-from fastapi import FastAPI, Response, Request
-from fastapi.responses import JSONResponse, StreamingResponse, PlainTextResponse
+from fastapi import FastAPI, Request
+from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel
 
 try:
@@ -40,26 +41,31 @@ EMERGENCY_CLASSES = {"fire", "knife", "gun", "stop_sign"}
 UNSAFE_CLASSES = {"car", "truck", "bus", "motorcycle", "bicycle", "person", "stairs"}
 CURRENCY_HINTS = ["USD", "RWF", "RWF", "FRW", "RWF", "Rwandan", "Franc", "FR", "$", "€", "£"]
 
+
 # -------------------------
 # Global State
 # -------------------------
 class Detection(BaseModel):
     class_name: str
     confidence: float
-    bbox_xyxy: List[int]
-    distance_hint: Optional[str] = None
+    bbox_xyxy: list[int]
+    distance_hint: str | None = None
+
 
 class DetectionsPayload(BaseModel):
     timestamp: float
     safety: str
     description: str
-    detections: List[Detection]
+    detections: list[Detection]
+
 
 class OCRPayload(BaseModel):
     text: str
 
+
 class SpeakBody(BaseModel):
     text: str
+
 
 app = FastAPI(title="BrailleWalk USB Camera Server", version="0.1.0")
 
@@ -73,17 +79,16 @@ _latest_frame_lock = threading.Lock()
 _latest_frame = None  # type: Optional[Tuple[float, any]]  # (timestamp, frame BGR)
 
 _latest_detections_lock = threading.Lock()
-_latest_detections: Optional[DetectionsPayload] = None
+_latest_detections: DetectionsPayload | None = None
 
 _announce_enabled = True
 _last_announce_time = 0.0
 
 # TTS subsystem: background worker thread + queue to avoid blocking async endpoints
-import asyncio
-from queue import Queue, Empty
+from queue import Empty, Queue
 
-aSYNC_TTS_QUEUE: "Queue[str]" = Queue(maxsize=100)
-_tts_thread: Optional[threading.Thread] = None
+aSYNC_TTS_QUEUE: Queue[str] = Queue(maxsize=100)
+_tts_thread: threading.Thread | None = None
 
 
 def _tts_worker():
@@ -91,8 +96,8 @@ def _tts_worker():
     if pyttsx3 is not None:
         try:
             engine = pyttsx3.init()
-            engine.setProperty('rate', 175)
-            engine.setProperty('volume', 1.0)
+            engine.setProperty("rate", 175)
+            engine.setProperty("volume", 1.0)
         except Exception:
             engine = None
     while True:
@@ -129,7 +134,7 @@ def tts_enqueue(text: str):
             pass
 
 
-def safety_and_description(classes: List[str]) -> Tuple[str, str]:
+def safety_and_description(classes: list[str]) -> tuple[str, str]:
     # Simple heuristic scoring
     has_emergency = any(c in EMERGENCY_CLASSES for c in classes)
     if has_emergency:
@@ -154,12 +159,12 @@ def safety_and_description(classes: List[str]) -> Tuple[str, str]:
     return "safe", "Area appears safe."
 
 
-def format_description(dets: List[Detection], safety: str) -> str:
+def format_description(dets: list[Detection], safety: str) -> str:
     # Compose a voice-friendly description
     if not dets:
         return "No notable objects detected."
     top_n = sorted(dets, key=lambda d: d.confidence, reverse=True)[:5]
-    items = [f"{d.class_name} {int(d.confidence*100)} percent" for d in top_n]
+    items = [f"{d.class_name} {int(d.confidence * 100)} percent" for d in top_n]
     base = ", ".join(items)
     return f"{base}. Safety status: {safety}."
 
@@ -177,16 +182,16 @@ def detection_thread():
 
         # YOLO inference
         results = model.predict(source=frame, imgsz=INFERENCE_SIZE, conf=CONF_THRESH, verbose=False)
-        det_list: List[Detection] = []
+        det_list: list[Detection] = []
         classes_flat = []
         if results and len(results) > 0:
             r = results[0]
             if r.boxes is not None and len(r.boxes) > 0:
                 names = r.names
                 for b in r.boxes:
-                    cls_id = int(b.cls.item()) if hasattr(b.cls, 'item') else int(b.cls)
-                    conf = float(b.conf.item()) if hasattr(b.conf, 'item') else float(b.conf)
-                    xyxy = b.xyxy[0].tolist() if hasattr(b.xyxy, 'tolist') else list(b.xyxy)
+                    cls_id = int(b.cls.item()) if hasattr(b.cls, "item") else int(b.cls)
+                    conf = float(b.conf.item()) if hasattr(b.conf, "item") else float(b.conf)
+                    xyxy = b.xyxy[0].tolist() if hasattr(b.xyxy, "tolist") else list(b.xyxy)
                     class_name = names.get(cls_id, str(cls_id)) if isinstance(names, dict) else str(cls_id)
                     classes_flat.append(class_name)
                     det_list.append(Detection(class_name=class_name, confidence=conf, bbox_xyxy=[int(x) for x in xyxy]))
@@ -230,16 +235,15 @@ def gen_mjpeg():
             _, frame = frame_data
             # Encode as JPEG
             encode_params = [int(cv2.IMWRITE_JPEG_QUALITY), MJPEG_JPEG_QUALITY]
-            ok, jpg = cv2.imencode('.jpg', frame, encode_params)
+            ok, jpg = cv2.imencode(".jpg", frame, encode_params)
             if not ok:
                 continue
             jpg_bytes = jpg.tobytes()
-            yield (b"--frame\r\n"
-                   b"Content-Type: image/jpeg\r\n\r\n" + jpg_bytes + b"\r\n")
+            yield (b"--frame\r\nContent-Type: image/jpeg\r\n\r\n" + jpg_bytes + b"\r\n")
     except GeneratorExit:
         # Client disconnected normally
         return
-    except Exception as e:
+    except Exception:
         # Swallow disconnect-related errors to avoid noisy tracebacks on Windows
         return
 
@@ -251,7 +255,7 @@ def root():
 
 @app.get("/preview")
 def preview():
-    return StreamingResponse(gen_mjpeg(), media_type='multipart/x-mixed-replace; boundary=frame')
+    return StreamingResponse(gen_mjpeg(), media_type="multipart/x-mixed-replace; boundary=frame")
 
 
 @app.get("/detections")
@@ -337,6 +341,7 @@ def _start_threads():
 
 if __name__ == "__main__":
     import uvicorn
+
     _start_threads()
     # Warm-up TTS
     try:
