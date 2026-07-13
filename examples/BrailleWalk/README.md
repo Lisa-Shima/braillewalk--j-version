@@ -3,6 +3,7 @@
 This example provides a minimal backend service to support the BrailleWalk prototype using a USB camera (or any OpenCV-supported camera). It uses Ultralytics YOLO for detection, optional OCR for reading text, and offline TTS for accessibility. It exposes HTTP endpoints and an MJPEG stream that a React Native (Expo SDK 53) app can consume.
 
 Key capabilities:
+
 - USB camera input only (no smartphone camera required)
 - Real-time YOLO object detection and scene interpretation
 - Heuristic environment safety/mood analysis (safe / unsafe / emergency)
@@ -58,6 +59,7 @@ This starts a FastAPI server at http://127.0.0.1:8000.
 ## Safety/Mood Heuristic
 
 Simple rule-based scoring from detections:
+
 - Emergency signals if classes like `fire`, `knife`, `gun`, `stop_sign` detected
 - Unsafe if high crowd density near, vehicles very close, or obstacles (e.g., `stairs`) directly ahead
 - Safe otherwise
@@ -74,7 +76,7 @@ You can refine in `examples/BrailleWalk/server.py`.
 Example fetch (TypeScript):
 
 ```ts
-const baseUrl = 'http://127.0.0.1:8000';
+const baseUrl = "http://127.0.0.1:8000";
 
 async function getDetections() {
   const res = await fetch(`${baseUrl}/detections`);
@@ -82,17 +84,23 @@ async function getDetections() {
 }
 
 async function speak(text: string) {
-  await fetch(`${baseUrl}/speak`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ text }) });
+  await fetch(`${baseUrl}/speak`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ text }),
+  });
 }
 ```
 
 To show the camera preview (MJPEG) in Expo:
+
 - Easiest: `WebView` component pointing to `${baseUrl}/preview`.
 - Alternatively, implement your own MJPEG renderer.
 
 ## Configuration
 
 Edit values at the top of `server.py`:
+
 - CAMERA_INDEX (default 0) – change to your USB camera index
 - MODEL_PATH (default `yolov8n.pt`)
 - INFERENCE_SIZE (e.g., 640)
@@ -105,4 +113,5 @@ Edit values at the top of `server.py`:
 - For Raspberry Pi camera: swap out the VideoCapture initialization with the appropriate GStreamer or `cv2.CAP_V4L2` options.
 
 ## License
+
 This example follows the Ultralytics repository license. Use responsibly.
